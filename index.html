@@ -53,6 +53,7 @@
         .btn-hard { background: #f39c12; } /* Orange */
         .btn-repeat { background: #e74c3c; } /* Red */
         .btn-unimportant { background: #95a5a6; } /* Gray */
+        .btn-veryimportant { background: #8e44ad; } /* Purple */
         
         /* Dashboard */
         .dashboard-controls { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
@@ -74,7 +75,7 @@
         
         /* Controls */
         .controls { display: flex; justify-content: center; gap: 0.5rem; display: none; flex-wrap: wrap;}
-        .controls button { flex: 1; min-width: 100px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px;}
+        .controls button { flex: 1; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px;}
         .shortcut-hint { font-size: 0.8rem; opacity: 0.8; font-weight: normal;}
         
         .stats { text-align: center; margin-top: 1rem; font-weight: bold; color: #7f8c8d;}
@@ -138,6 +139,7 @@
         <button class="btn btn-hard" onclick="markCard('hard')">Hard <span class="shortcut-hint">[3]</span></button>
         <button class="btn btn-repeat" onclick="markCard('repeat')">Repeat <span class="shortcut-hint">[4]</span></button>
         <button class="btn btn-unimportant" id="btn-toggle-unimp" onclick="toggleUnimportant()">Unimp. <span class="shortcut-hint">[5]</span></button>
+        <button class="btn btn-veryimportant" id="btn-toggle-veryimp" onclick="toggleVeryImportant()">Very Imp. <span class="shortcut-hint">[6]</span></button>
     </div>
     
     <div class="stats" id="stats-display"></div>
@@ -148,7 +150,7 @@
     let studyQueue = [];
     let showingAnswer = false;
     let currentDeckIndex = -1;
-    let currentStudyMode = 'all'; // Can be 'all', 'important', or 'unimportant'
+    let currentStudyMode = 'all'; 
 
     // --- NAVIGATION & UI ---
     function showDashboard() {
@@ -166,7 +168,6 @@
     }
 
     function renderDashboard() {
-        // Sort decks using natural sorting
         decks.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         localStorage.setItem('mlFlashcardsDecks', JSON.stringify(decks));
 
@@ -180,7 +181,8 @@
         decks.forEach((deck, index) => {
             const total = deck.cards.length;
             const unimp = deck.cards.filter(c => c.unimportant).length;
-            const imp = total - unimp;
+            const veryImp = deck.cards.filter(c => c.veryImportant).length;
+            const imp = total - unimp - veryImp;
 
             const li = document.createElement('li');
             li.className = 'deck-item';
@@ -191,6 +193,7 @@
                 </div>
                 <div class="deck-actions">
                     <button class="btn btn-primary" style="background:#007bff;" onclick="startStudy(${index}, 'all')">Study All</button>
+                    <button class="btn btn-primary" style="background:#8e44ad;" onclick="startStudy(${index}, 'very_important')">Very Imp. (${veryImp})</button>
                     <button class="btn btn-primary" style="background:#3498db;" onclick="startStudy(${index}, 'important')">Important (${imp})</button>
                     <button class="btn btn-primary" style="background:#95a5a6;" onclick="startStudy(${index}, 'unimportant')">Unimportant (${unimp})</button>
                 </div>
@@ -218,11 +221,13 @@
                     
                     const existingIndex = decks.findIndex(d => d.name === deckName);
                     if (existingIndex > -1) {
-                        // Preserve the unimportant flags if re-importing over an existing deck
                         const existingCards = decks[existingIndex].cards;
                         cards.forEach(newCard => {
                             const match = existingCards.find(c => c.q === newCard.q);
-                            if (match && match.unimportant) newCard.unimportant = true;
+                            if (match) {
+                                if (match.unimportant) newCard.unimportant = true;
+                                if (match.veryImportant) newCard.veryImportant = true;
+                            }
                         });
                         decks[existingIndex].cards = cards;
                     } else {
@@ -345,7 +350,6 @@
     function restartCurrentDeck() {
         const deck = decks[currentDeckIndex];
         
-        // Create a deep copy and inject the original array index so we can update the master record later
         let queue = deck.cards.map((c, i) => {
             let copy = JSON.parse(JSON.stringify(c));
             copy.originalIndex = i;
@@ -354,18 +358,20 @@
 
         // Filter based on the selected mode
         if (currentStudyMode === 'important') {
-            queue = queue.filter(c => !c.unimportant);
+            queue = queue.filter(c => !c.unimportant && !c.veryImportant);
         } else if (currentStudyMode === 'unimportant') {
             queue = queue.filter(c => c.unimportant);
+        } else if (currentStudyMode === 'very_important') {
+            queue = queue.filter(c => c.veryImportant);
         }
 
         studyQueue = queue;
         
-        // Update Title to reflect mode
-        let modeString = currentStudyMode.charAt(0).toUpperCase() + currentStudyMode.slice(1);
+        let modeString = currentStudyMode.replace('_', ' ');
+        modeString = modeString.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        
         document.getElementById('current-deck-title').innerText = `Studying: ${deck.name} (${modeString})`;
         
-        // Reset Views
         document.getElementById('card-wrapper').style.display = 'block';
         document.getElementById('finished-screen').style.display = 'none';
         document.getElementById('restart-btn').classList.add('hidden');
@@ -394,15 +400,27 @@
         document.getElementById('review-controls').style.display = 'none';
         document.getElementById('flip-hint').style.display = 'block';
         
-        // Update the 5th Button UI in the review controls
-        const isUnimportant = decks[currentDeckIndex].cards[card.originalIndex].unimportant;
-        const toggleBtn = document.getElementById('btn-toggle-unimp');
-        if (isUnimportant) {
-            toggleBtn.innerHTML = 'Make Important <span class="shortcut-hint">[5]</span>';
-            toggleBtn.style.background = '#3498db'; // Turn blue to indicate marking it important
+        // Update the 5th and 6th Button UI based on current master deck state
+        const cardRef = decks[currentDeckIndex].cards[card.originalIndex];
+        const toggleBtn5 = document.getElementById('btn-toggle-unimp');
+        const toggleBtn6 = document.getElementById('btn-toggle-veryimp');
+
+        // Button 5 (Unimportant logic / Downgrade)
+        if (cardRef.unimportant || cardRef.veryImportant) {
+            toggleBtn5.innerHTML = 'Make Imp. <span class="shortcut-hint">[5]</span>';
+            toggleBtn5.style.background = '#3498db'; 
         } else {
-            toggleBtn.innerHTML = 'Unimportant <span class="shortcut-hint">[5]</span>';
-            toggleBtn.style.background = '#95a5a6'; // Gray for unimportant
+            toggleBtn5.innerHTML = 'Unimp. <span class="shortcut-hint">[5]</span>';
+            toggleBtn5.style.background = '#95a5a6'; 
+        }
+
+        // Button 6 (Very Important logic / Upgrade)
+        if (cardRef.veryImportant) {
+            toggleBtn6.innerHTML = 'Make Imp. <span class="shortcut-hint">[6]</span>';
+            toggleBtn6.style.background = '#3498db'; 
+        } else {
+            toggleBtn6.innerHTML = 'Very Imp. <span class="shortcut-hint">[6]</span>';
+            toggleBtn6.style.background = '#8e44ad'; 
         }
 
         if (window.MathJax) MathJax.typesetPromise();
@@ -438,20 +456,38 @@
 
     function toggleUnimportant() {
         if (studyQueue.length === 0) return;
-        
-        // Remove it immediately from the current learning process
         const card = studyQueue.shift(); 
-        
-        // Find the actual card in the saved deck using our injected originalIndex
         const originalIndex = card.originalIndex;
+        const cardRef = decks[currentDeckIndex].cards[originalIndex];
         
-        // Toggle the state in the master deck
-        decks[currentDeckIndex].cards[originalIndex].unimportant = !decks[currentDeckIndex].cards[originalIndex].unimportant;
+        // If Very Important, downgrade to Important. If Important, downgrade to Unimportant.
+        if (cardRef.veryImportant) {
+            cardRef.veryImportant = false;
+        } else if (cardRef.unimportant) {
+            cardRef.unimportant = false;
+        } else {
+            cardRef.unimportant = true;
+        }
         
-        // Save to LocalStorage immediately
         localStorage.setItem('mlFlashcardsDecks', JSON.stringify(decks));
+        updateCard();
+    }
+
+    function toggleVeryImportant() {
+        if (studyQueue.length === 0) return;
+        const card = studyQueue.shift(); 
+        const originalIndex = card.originalIndex;
+        const cardRef = decks[currentDeckIndex].cards[originalIndex];
         
-        // Move directly to the next card
+        // Toggle Very Important state (and wipe unimportant flag if it existed)
+        if (cardRef.veryImportant) {
+            cardRef.veryImportant = false;
+        } else {
+            cardRef.veryImportant = true;
+            cardRef.unimportant = false;
+        }
+        
+        localStorage.setItem('mlFlashcardsDecks', JSON.stringify(decks));
         updateCard();
     }
 
@@ -465,13 +501,13 @@
             showAnswer();
         }
         
-        // Only allow 1-5 when the answer is showing (matching UI visibility)
         if (showingAnswer) {
             if (e.key === '1') markCard('easy');
             if (e.key === '2') markCard('good');
             if (e.key === '3') markCard('hard');
             if (e.key === '4') markCard('repeat');
             if (e.key === '5') toggleUnimportant();
+            if (e.key === '6') toggleVeryImportant();
         }
     });
 
