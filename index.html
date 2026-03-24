@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Flashcards Pro</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        window.MathJax = {
+          tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] }
+        };
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        h1, h2 { text-align: center; color: #2c3e50; }
+        
+        /* Inputs */
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem;}
+        textarea { width: 100%; height: 200px; padding: 10px; font-family: monospace; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 1rem; box-sizing: border-box; }
+        
+        /* Buttons */
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: background 0.2s; color: white;}
+        .btn-primary { background: #007bff; width: 100%; margin-bottom: 0.5rem;}
+        .btn-primary:hover { background: #0056b3; }
+        .btn-add { background: #2ecc71; width: 100%;}
+        .btn-add:hover { background: #27ae60; }
+        .btn-folder { background: #8e44ad; width: 100%;}
+        .btn-folder:hover { background: #9b59b6; }
+        .btn-danger { background: #e74c3c; padding: 5px 10px; font-size: 0.9rem;}
+        .btn-danger:hover { background: #c0392b; }
+        .btn-delete-all { background: #e74c3c; width: 100%; padding: 10px 20px; font-size: 1rem; }
+        .btn-delete-all:hover { background: #c0392b; }
+        
+        /* SRS Buttons */
+        .btn-easy { background: #2ecc71; } /* Green */
+        .btn-good { background: #3498db; } /* Blue */
+        .btn-hard { background: #f39c12; } /* Orange */
+        .btn-repeat { background: #e74c3c; } /* Red */
+        .btn-unimportant { background: #95a5a6; } /* Gray */
+        
+        /* Dashboard */
+        .dashboard-controls { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .dashboard-controls > * { flex: 1; min-width: 200px; margin-bottom: 0; }
+        
+        .deck-list { list-style: none; padding: 0; }
+        .deck-item { display: flex; flex-direction: column; gap: 10px; background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;}
+        .deck-header { display: flex; justify-content: space-between; align-items: center; width: 100%;}
+        .deck-title { font-weight: bold; font-size: 1.2rem; color: #2c3e50; }
+        .deck-actions { display: flex; gap: 10px; width: 100%; flex-wrap: wrap;}
+        .deck-actions button { flex: 1; padding: 8px; font-size: 0.9rem; }
+        
+        /* Cards */
+        .card-container { perspective: 1000px; margin: 2rem 0; }
+        .card { background: #fff; border: 2px solid #e2e8f0; border-radius: 12px; padding: 3rem 2rem; min-height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 1.25rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; }
+        .card-divider { width: 100%; height: 1px; background: #e2e8f0; margin: 1.5rem 0; display: none; }
+        .answer-text { display: none; color: #2c3e50; width: 100%; text-align: left; font-size: 1.1rem; line-height: 1.5;}
+        .answer-text ul, .answer-text ol { margin-top: 0.5rem; padding-left: 1.5rem; }
+        
+        /* Controls */
+        .controls { display: flex; justify-content: center; gap: 0.5rem; display: none; flex-wrap: wrap;}
+        .controls button { flex: 1; min-width: 100px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px;}
+        .shortcut-hint { font-size: 0.8rem; opacity: 0.8; font-weight: normal;}
+        
+        .stats { text-align: center; margin-top: 1rem; font-weight: bold; color: #7f8c8d;}
+        .hidden { display: none !important; }
+        .top-nav { margin-bottom: 1rem; display: flex; justify-content: flex-start; gap: 1rem;}
+        
+        /* Finished Screen */
+        .finished-screen { text-align: center; padding: 3rem; background: white; border-radius: 12px; margin: 2rem 0; display: none;}
+    </style>
+</head>
+<body>
+
+<div class="container" id="dashboard-view">
+    <h1>📚 My Flashcard Decks</h1>
+    
+    <div class="dashboard-controls">
+        <button class="btn btn-add" onclick="showSetup()">+ Create Deck Manually</button>
+        <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden" onchange="importFolder(event)">
+        <button class="btn btn-folder" onclick="document.getElementById('folder-input').click()">📁 Import 'lectures' Folder</button>
+        <button class="btn btn-delete-all" onclick="deleteAllDecks()">🗑️ Delete All Decks</button>
+    </div>
+
+    <ul class="deck-list" id="deck-list-container">
+        </ul>
+</div>
+
+<div class="container hidden" id="setup-view">
+    <div class="top-nav">
+        <button class="btn btn-primary" style="width: auto;" onclick="showDashboard()">← Back to Dashboard</button>
+    </div>
+    <h2>Create New Deck</h2>
+    <input type="text" id="deck-name" placeholder="Deck Name (e.g., ResNets, NLP Basics)">
+    <textarea id="notes-input" placeholder="Paste your raw Markdown notes here..."></textarea>
+    <button class="btn btn-primary" onclick="saveNewDeck()">Save & Go to Dashboard</button>
+</div>
+
+<div class="container hidden" id="study-view">
+    <div class="top-nav">
+        <button class="btn btn-primary" style="width: auto;" onclick="showDashboard()">← Back to Dashboard</button>
+        <button class="btn btn-primary hidden" id="restart-btn" style="width: auto; background:#2ecc71;" onclick="restartCurrentDeck()">↻ Study Again</button>
+    </div>
+    <h2 id="current-deck-title">Studying</h2>
+    
+    <div class="card-container" id="card-wrapper">
+        <div class="card" onclick="showAnswer()">
+            <div id="card-question"></div>
+            <div class="card-divider" id="divider"></div>
+            <div id="card-answer" class="answer-text"></div>
+            <div id="flip-hint" style="margin-top:2rem; font-size:0.9rem; color:#95a5a6;">(Press Space, Enter, or Click to Flip)</div>
+        </div>
+    </div>
+    
+    <div class="finished-screen" id="finished-screen">
+        <h2>🎉 Deck Finished!</h2>
+        <p>Great job! You've gone through all the cards in this queue.</p>
+    </div>
+    
+    <div class="controls" id="review-controls">
+        <button class="btn btn-easy" onclick="markCard('easy')">Easy <span class="shortcut-hint">[1]</span></button>
+        <button class="btn btn-good" onclick="markCard('good')">Good <span class="shortcut-hint">[2]</span></button>
+        <button class="btn btn-hard" onclick="markCard('hard')">Hard <span class="shortcut-hint">[3]</span></button>
+        <button class="btn btn-repeat" onclick="markCard('repeat')">Repeat <span class="shortcut-hint">[4]</span></button>
+        <button class="btn btn-unimportant" id="btn-toggle-unimp" onclick="toggleUnimportant()">Unimp. <span class="shortcut-hint">[5]</span></button>
+    </div>
+    
+    <div class="stats" id="stats-display"></div>
+</div>
+
+<script>
+    let decks = JSON.parse(localStorage.getItem('mlFlashcardsDecks')) || [];
+    let studyQueue = [];
+    let showingAnswer = false;
+    let currentDeckIndex = -1;
+    let currentStudyMode = 'all'; // Can be 'all', 'important', or 'unimportant'
+
+    // --- NAVIGATION & UI ---
+    function showDashboard() {
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('setup-view').classList.add('hidden');
+        document.getElementById('study-view').classList.add('hidden');
+        renderDashboard();
+    }
+
+    function showSetup() {
+        document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('setup-view').classList.remove('hidden');
+        document.getElementById('deck-name').value = '';
+        document.getElementById('notes-input').value = '';
+    }
+
+    function renderDashboard() {
+        // Sort decks using natural sorting
+        decks.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        localStorage.setItem('mlFlashcardsDecks', JSON.stringify(decks));
+
+        const container = document.getElementById('deck-list-container');
+        container.innerHTML = '';
+        if (decks.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#7f8c8d;">No decks yet. Import a folder or create one manually!</p>';
+            return;
+        }
+        
+        decks.forEach((deck, index) => {
+            const total = deck.cards.length;
+            const unimp = deck.cards.filter(c => c.unimportant).length;
+            const imp = total - unimp;
+
+            const li = document.createElement('li');
+            li.className = 'deck-item';
+            li.innerHTML = `
+                <div class="deck-header">
+                    <div class="deck-title">${deck.name} <span style="font-size:0.9rem; font-weight:normal; color:#7f8c8d;">(${total} total cards)</span></div>
+                    <button class="btn btn-danger" style="padding: 5px 10px;" onclick="deleteDeck(${index})">Delete</button>
+                </div>
+                <div class="deck-actions">
+                    <button class="btn btn-primary" style="background:#007bff;" onclick="startStudy(${index}, 'all')">Study All</button>
+                    <button class="btn btn-primary" style="background:#3498db;" onclick="startStudy(${index}, 'important')">Important (${imp})</button>
+                    <button class="btn btn-primary" style="background:#95a5a6;" onclick="startStudy(${index}, 'unimportant')">Unimportant (${unimp})</button>
+                </div>
+            `;
+            container.appendChild(li);
+        });
+    }
+
+    // --- FOLDER IMPORT LOGIC ---
+    async function importFolder(event) {
+        const files = event.target.files;
+        if (files.length === 0) return;
+
+        let addedDecksCount = 0;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            
+            if (file.name.toLowerCase().endsWith('.md')) {
+                const text = await file.text();
+                const cards = parseNotes(text);
+                
+                if (cards.length > 0) {
+                    const deckName = file.name.replace(/\.md$/i, '');
+                    
+                    const existingIndex = decks.findIndex(d => d.name === deckName);
+                    if (existingIndex > -1) {
+                        // Preserve the unimportant flags if re-importing over an existing deck
+                        const existingCards = decks[existingIndex].cards;
+                        cards.forEach(newCard => {
+                            const match = existingCards.find(c => c.q === newCard.q);
+                            if (match && match.unimportant) newCard.unimportant = true;
+                        });
+                        decks[existingIndex].cards = cards;
+                    } else {
+                        decks.push({ name: deckName, cards: cards });
+                    }
+                    addedDecksCount++;
+                }
+            }
+        }
+
+        if (addedDecksCount > 0) {
+            renderDashboard(); 
+            alert(`Successfully imported ${addedDecksCount} markdown file(s) as decks!`);
+        } else {
+            alert("No questions found in the selected .md files. Check your formatting.");
+        }
+        
+        event.target.value = '';
+    }
+
+    // --- DECK MANAGEMENT ---
+    function saveNewDeck() {
+        const name = document.getElementById('deck-name').value.trim();
+        const text = document.getElementById('notes-input').value;
+        
+        if (!name) return alert("Please provide a deck name.");
+        
+        const cards = parseNotes(text);
+        if (cards.length === 0) return alert("Couldn't detect any questions. Make sure they start with 'Q:' or end with '?'.");
+        
+        decks.push({ name: name, cards: cards });
+        renderDashboard(); 
+        showDashboard();
+    }
+
+    function deleteDeck(index) {
+        if(confirm("Are you sure you want to delete this deck?")) {
+            decks.splice(index, 1);
+            renderDashboard(); 
+        }
+    }
+
+    function deleteAllDecks() {
+        if (decks.length === 0) return alert("You don't have any decks to delete!");
+        
+        if(confirm("🚨 WARNING: Are you absolutely sure you want to delete ALL of your decks? This cannot be undone!")) {
+            decks = [];
+            localStorage.removeItem('mlFlashcardsDecks');
+            renderDashboard();
+        }
+    }
+
+    // --- UNIVERSAL PARSER ---
+    function parseNotes(text) {
+        text = text.replace(/\*\*/g, ''); 
+        const lines = text.split('\n');
+        let parsedCards = [];
+        let currentQ = '';
+        let currentA = [];
+
+        for (let line of lines) {
+            let trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            let isHeader = /^#+\s/.test(trimmedLine);
+            let isQuestionMark = trimmedLine.endsWith('?');
+            let isQPrefix = /^Q:\s*/i.test(trimmedLine);
+
+            if (isQPrefix || isQuestionMark) {
+                if (currentQ) parsedCards.push({ q: currentQ, a: currentA.join('\n') });
+                currentQ = trimmedLine.replace(/^#+\s*/, '').replace(/^Q:\s*/i, '');
+                currentA = [];
+            } else if (isHeader) {
+                if (currentQ) { 
+                    parsedCards.push({ q: currentQ, a: currentA.join('\n') }); 
+                    currentQ = ''; 
+                    currentA = []; 
+                }
+            } else if (currentQ) {
+                let cleanedLine = trimmedLine;
+                if (/^A:\s*/i.test(cleanedLine)) cleanedLine = cleanedLine.replace(/^A:\s*/i, '');
+                currentA.push(cleanedLine);
+            }
+        }
+        
+        if (currentQ) parsedCards.push({ q: currentQ, a: currentA.join('\n') });
+        return parsedCards;
+    }
+
+    // --- MATH & MARKDOWN RENDERER ---
+    function renderMarkdownProtectMath(rawText) {
+        let mathBlocks = [];
+        let text = rawText.replace(/\$\$(.*?)\$\$/gs, (match) => {
+            mathBlocks.push(match);
+            return `MATHBLOCKPLACEHOLDER${mathBlocks.length - 1}ENDMATH`;
+        });
+        text = text.replace(/\$(.*?)\$/g, (match) => {
+            mathBlocks.push(match);
+            return `MATHBLOCKPLACEHOLDER${mathBlocks.length - 1}ENDMATH`;
+        });
+
+        let html = marked.parse(text);
+
+        mathBlocks.forEach((math, index) => {
+            html = html.replace(`MATHBLOCKPLACEHOLDER${index}ENDMATH`, math);
+        });
+        return html;
+    }
+
+    // --- STUDY LOGIC ---
+    function startStudy(deckIndex, mode) {
+        currentDeckIndex = deckIndex;
+        currentStudyMode = mode;
+        restartCurrentDeck();
+        
+        document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('study-view').classList.remove('hidden');
+    }
+
+    function restartCurrentDeck() {
+        const deck = decks[currentDeckIndex];
+        
+        // Create a deep copy and inject the original array index so we can update the master record later
+        let queue = deck.cards.map((c, i) => {
+            let copy = JSON.parse(JSON.stringify(c));
+            copy.originalIndex = i;
+            return copy;
+        });
+
+        // Filter based on the selected mode
+        if (currentStudyMode === 'important') {
+            queue = queue.filter(c => !c.unimportant);
+        } else if (currentStudyMode === 'unimportant') {
+            queue = queue.filter(c => c.unimportant);
+        }
+
+        studyQueue = queue;
+        
+        // Update Title to reflect mode
+        let modeString = currentStudyMode.charAt(0).toUpperCase() + currentStudyMode.slice(1);
+        document.getElementById('current-deck-title').innerText = `Studying: ${deck.name} (${modeString})`;
+        
+        // Reset Views
+        document.getElementById('card-wrapper').style.display = 'block';
+        document.getElementById('finished-screen').style.display = 'none';
+        document.getElementById('restart-btn').classList.add('hidden');
+        
+        updateCard();
+    }
+
+    function updateCard() {
+        if (studyQueue.length === 0) {
+            document.getElementById('card-wrapper').style.display = 'none';
+            document.getElementById('finished-screen').style.display = 'block';
+            document.getElementById('review-controls').style.display = 'none';
+            document.getElementById('stats-display').innerText = '';
+            document.getElementById('restart-btn').classList.remove('hidden');
+            return;
+        }
+
+        showingAnswer = false;
+        const card = studyQueue[0];
+        
+        document.getElementById('card-question').innerHTML = renderMarkdownProtectMath(card.q);
+        document.getElementById('card-answer').innerHTML = renderMarkdownProtectMath(card.a);
+        
+        document.getElementById('card-answer').style.display = 'none';
+        document.getElementById('divider').style.display = 'none';
+        document.getElementById('review-controls').style.display = 'none';
+        document.getElementById('flip-hint').style.display = 'block';
+        
+        // Update the 5th Button UI in the review controls
+        const isUnimportant = decks[currentDeckIndex].cards[card.originalIndex].unimportant;
+        const toggleBtn = document.getElementById('btn-toggle-unimp');
+        if (isUnimportant) {
+            toggleBtn.innerHTML = 'Make Important <span class="shortcut-hint">[5]</span>';
+            toggleBtn.style.background = '#3498db'; // Turn blue to indicate marking it important
+        } else {
+            toggleBtn.innerHTML = 'Unimportant <span class="shortcut-hint">[5]</span>';
+            toggleBtn.style.background = '#95a5a6'; // Gray for unimportant
+        }
+
+        if (window.MathJax) MathJax.typesetPromise();
+
+        document.getElementById('stats-display').innerText = `Cards remaining in queue: ${studyQueue.length}`;
+    }
+
+    function showAnswer() {
+        if (showingAnswer || studyQueue.length === 0) return;
+        showingAnswer = true;
+        
+        document.getElementById('card-answer').style.display = 'block';
+        document.getElementById('divider').style.display = 'block';
+        document.getElementById('flip-hint').style.display = 'none';
+        document.getElementById('review-controls').style.display = 'flex';
+    }
+
+    function markCard(rating) {
+        const card = studyQueue.shift(); 
+        
+        if (rating === 'repeat') {
+            studyQueue.splice(1, 0, card);
+        } else if (rating === 'hard') {
+            const pos = Math.max(1, Math.floor(studyQueue.length * 0.25));
+            studyQueue.splice(pos, 0, card);
+        } else if (rating === 'good') {
+            const pos = Math.max(1, Math.floor(studyQueue.length * 0.75));
+            studyQueue.splice(pos, 0, card);
+        }
+        
+        updateCard();
+    }
+
+    function toggleUnimportant() {
+        if (studyQueue.length === 0) return;
+        
+        // Remove it immediately from the current learning process
+        const card = studyQueue.shift(); 
+        
+        // Find the actual card in the saved deck using our injected originalIndex
+        const originalIndex = card.originalIndex;
+        
+        // Toggle the state in the master deck
+        decks[currentDeckIndex].cards[originalIndex].unimportant = !decks[currentDeckIndex].cards[originalIndex].unimportant;
+        
+        // Save to LocalStorage immediately
+        localStorage.setItem('mlFlashcardsDecks', JSON.stringify(decks));
+        
+        // Move directly to the next card
+        updateCard();
+    }
+
+    // --- KEYBOARD SHORTCUTS ---
+    document.addEventListener('keydown', (e) => {
+        if (document.getElementById('study-view').classList.contains('hidden')) return;
+        if (studyQueue.length === 0) return; 
+        
+        if (e.code === 'Space' || e.code === 'Enter') {
+            e.preventDefault();
+            showAnswer();
+        }
+        
+        // Only allow 1-5 when the answer is showing (matching UI visibility)
+        if (showingAnswer) {
+            if (e.key === '1') markCard('easy');
+            if (e.key === '2') markCard('good');
+            if (e.key === '3') markCard('hard');
+            if (e.key === '4') markCard('repeat');
+            if (e.key === '5') toggleUnimportant();
+        }
+    });
+
+    // Initialize
+    renderDashboard();
+</script>
+
+</body>
+</html>
